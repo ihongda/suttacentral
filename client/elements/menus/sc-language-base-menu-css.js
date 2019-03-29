@@ -30,14 +30,7 @@ export const languageBaseMenuCss = html`
       .language-menu-list {
         background-color: var(--sc-secondary-background-color);
       }
-
-      /* .iso-code-image {
-        fill: var(--sc-disabled-text-color);
-        margin-top: var(--sc-size-xs);
-        width: var(--sc-size-language-icon);
-        height: var(--sc-size-language-icon);
-      } */
-
+      
       .language-menu-paper-item {
         @apply --sc-skolar-font-size-md;
         color: var(--sc-primary-text-color); 
