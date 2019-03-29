@@ -225,8 +225,7 @@ class SCNavigationMenu extends LitLocalized(LitElement) {
                 ${childItem.lang_iso ? html`                  
                   <span class="nav-link" data-iso="${this.getLanguageName(childItem.lang_iso)}">${childItem.name}</span>
                 ` : html`
-                  <span class="nav-link">${childItem.name}</span>
-                `}
+                  <span class="nav-link">${childItem.name}</span>`}
                 ` : html`
                   ${childItem.lang_iso ? html`                  
                     <a class="nav-link link-text-ellipsis" title="${childItem.name}"
