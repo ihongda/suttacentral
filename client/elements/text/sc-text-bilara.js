@@ -218,38 +218,36 @@ export class SCTextBilara extends SCTextCommon {
   _updateView() {
     reduxActions.changeLinearProgressActiveState(true);
     setTimeout(() => {
-      this._addTranslationText();
+      requestAnimationFrame(() => this._addTranslationText());
       if (this.paliScript === 'latin' || this.rootSutta.lang !== 'pli') {
-        this._addRootText();
+        requestAnimationFrame(() => this._addRootText());
       } else {
-        this._setScript();
+        this._setScript(); // Internal changes will handle rAF for DOM parts
       }
       if (this.displayedReferences?.length > 0 && this.displayedReferences?.[0] !== 'none') {
-        this._deleteReference();
-        this._addSCReference();
-        this._addReferenceText();
+        this._deleteReference(); // Assuming this is quick
+        this._addSCReference();   // Assuming this is quick
+        this._addReferenceText(); // Internal changes will handle rAF for DOM parts
       }
       if (window.location.href.includes('#')) {
-        this._deleteSCReference();
-        this._addSCReference();
+        this._deleteSCReference(); // Assuming this is quick
+        this._addSCReference();   // Assuming this is quick
       }
-      this._addVariantText();
-      this._addCommentText();
-      this._paliLookupStateChanged();
-      this._chineseLookupStateChanged();
-      this._showHighlightingChanged();
-      this._hashChangeHandler();
+      requestAnimationFrame(() => this._addVariantText());
+      requestAnimationFrame(() => this._addCommentText());
+      this._paliLookupStateChanged(); // Internal changes will handle rAF for heavy DOM parts
+      this._chineseLookupStateChanged(); // Internal changes will handle rAF for heavy DOM parts
+      requestAnimationFrame(() => this._showHighlightingChanged());
+      requestAnimationFrame(() => this._hashChangeHandler());
     }, 100);
     this._prepareNavigation();
 
-    setTimeout(() => {
+    requestAnimationFrame(() => {
       this._updateTextViewStylesBasedOnState();
       this._recalculateCommentSpanHeight();
-    }, 0);
+    });
 
-    setTimeout(() => {
-      this._setupSelectionEvents();
-    }, 100);
+    requestAnimationFrame(() => this._setupSelectionEvents());
 
     this.actions.changeSuttaMetaText('');
     if (!this.isRangeSutta) {
@@ -1102,11 +1100,13 @@ export class SCTextBilara extends SCTextCommon {
       return;
     }
     await this._fetchRootEdition();
-    Object.entries(this.suttaReference).forEach(([key, value]) => {
-      const refElement = this.querySelector(`#${CSS.escape(key)} .reference`);
-      if (refElement) {
-        this._addReferenceAnchor(value, refElement);
-      }
+    requestAnimationFrame(() => {
+      Object.entries(this.suttaReference).forEach(([key, value]) => {
+        const refElement = this.querySelector(`#${CSS.escape(key)} .reference`);
+        if (refElement) {
+          this._addReferenceAnchor(value, refElement);
+        }
+      });
     });
 
     this._hashChangeHandler();
@@ -1209,55 +1209,53 @@ export class SCTextBilara extends SCTextCommon {
   }
 
   _putSegmentIntoSpans(segment, unit) {
-    const text = segment.innerHTML;
-    const div = document.createElement('div');
-    div.innerHTML = text;
-    this._recurseDomChildren(div, true, unit);
-    segment.innerHTML = div.innerHTML
-      .replace(/%spfrnt%/g, `<span class="word">`)
-      .replace(/%spback%/g, '</span>')
-      .replace(/—/g, '</span>—<span class="word">');
+    const fragment = document.createDocumentFragment();
+    // Process child nodes into the fragment
+    this._processNodesToFragment(segment.childNodes, fragment, unit);
+
+    // Clear the original segment and append the new structure
+    segment.innerHTML = '';
+    segment.appendChild(fragment);
   }
 
-  _recurseDomChildren(start, output, unit) {
-    let nodes;
-    if (start.childNodes) {
-      nodes = start.childNodes;
-      this._loopNodeChildren(nodes, output, unit);
-    }
-  }
-
-  _loopNodeChildren(nodes, output, unit) {
-    let node;
-    for (let i = 0; i < nodes.length; i++) {
-      node = nodes[i];
-      this._addSpanToNode(node, unit);
-      if (node.childNodes) {
-        this._recurseDomChildren(node, output, unit);
-      }
-    }
-  }
-
-  _addSpanToNode(node, unit) {
-    const NODE_TYPE_TEXT = 3;
-    if (node.nodeType !== NODE_TYPE_TEXT) {
-      return;
-    }
-    const tt = node.data;
-    const strArr = tt.split(/\s+/g);
-    let str = '';
-    for (let i = 0; i < strArr.length; i++)
-      if (strArr[i]) {
-        if (unit === 'word') {
-          str += `%spfrnt%${strArr[i]}%spback% `;
-        } else if (unit === 'graph') {
-          for (const graph of strArr[i]) {
-            str += `%spfrnt%${graph}%spback%`;
+  _processNodesToFragment(nodes, fragment, unit) {
+    Array.from(nodes).forEach(node => {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        // Clone the element and append it to the fragment
+        const clonedElement = node.cloneNode(false); // shallow clone
+        fragment.appendChild(clonedElement);
+        // Recursively process children of this element into the cloned element
+        this._processNodesToFragment(node.childNodes, clonedElement, unit);
+      } else if (node.nodeType === Node.TEXT_NODE) {
+        const textContent = node.textContent;
+        if (unit === 'graph') {
+          for (const char of textContent) { // Iterate over each character
+            if (char.match(/^\s$/)) { // If the character is whitespace
+              fragment.appendChild(document.createTextNode(char));
+            } else { // If the character is not whitespace
+              const span = document.createElement('span');
+              span.className = 'word'; // As per original, class is 'word'
+              span.textContent = char;
+              fragment.appendChild(span);
+            }
           }
-          str += ' ';
+        } else { // 'word' unit
+          // Split by sequences of whitespace, keeping the whitespace as parts
+          const parts = textContent.split(/(\s+)/);
+          parts.forEach(part => {
+            if (part.length === 0) return; // Skip empty parts
+            if (part.match(/^\s+$/)) { // It's a whitespace part
+              fragment.appendChild(document.createTextNode(part));
+            } else { // It's a word part
+              const span = document.createElement('span');
+              span.className = 'word';
+              span.textContent = part;
+              fragment.appendChild(span);
+            }
+          });
         }
       }
-    node.data = str;
+    });
   }
 
   _addWordSpanId(selector) {
@@ -1353,7 +1351,9 @@ export class SCTextBilara extends SCTextCommon {
 
   _enablePaliLookup() {
     if (!this.spansForWordsGenerated) {
-      this._putWordsIntoSpans('.root .text', 'word');
+      requestAnimationFrame(() => {
+        this._putWordsIntoSpans('.root .text', 'word');
+      });
     }
     this._addWordSpanId('span.word');
     setTimeout(() => {
@@ -1363,7 +1363,9 @@ export class SCTextBilara extends SCTextCommon {
 
   _enableChineseLookup() {
     if (!this.spansForGraphsGenerated) {
-      this._conditionallyPutIntoSpans('lzh');
+      requestAnimationFrame(() => {
+        this._conditionallyPutIntoSpans('lzh');
+      });
     }
     this._addWordSpanId('.root .text .word');
     setTimeout(() => {
@@ -1447,10 +1449,12 @@ export class SCTextBilara extends SCTextCommon {
 
   async _setScriptOfSegments() {
     await this._scriptTransliterate(this.suttaId, this._scriptFunctionName());
-    this._addTransliteratedRootText();
-    if (this.querySelectorAll('.variant').length === 0) {
-      this._addVariantText();
-    }
+    requestAnimationFrame(() => {
+      this._addTransliteratedRootText();
+      if (this.querySelectorAll('.variant').length === 0) {
+        this._addVariantText();
+      }
+    });
   }
 
   _scriptFunctionName() {
